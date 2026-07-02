@@ -53,10 +53,13 @@ export async function GET() {
         const change = price - prevClose;
         const changePercent = prevClose ? (change / prevClose) * 100 : 0;
 
-        // 역대 고점 계산
-        const closes = history.indicators?.quote?.[0]?.close ?? [];
-        const validCloses = closes.filter((v): v is number => v !== null && !isNaN(v));
-        const allTimeHigh = validCloses.length > 0 ? Math.max(...validCloses) : null;
+        // 역대 고점 계산 — 월간 고가(high) 기준으로 장중 피크까지 포함
+        const highs = history.indicators?.quote?.[0]?.high ?? [];
+        const validHighs = highs.filter((v): v is number => v !== null && !isNaN(v));
+        // 현재 장중 고가도 후보에 포함
+        const currentHigh = meta.regularMarketDayHigh as number | undefined;
+        if (currentHigh) validHighs.push(currentHigh);
+        const allTimeHigh = validHighs.length > 0 ? Math.max(...validHighs) : null;
         const athDrawdown =
           allTimeHigh !== null && allTimeHigh > 0
             ? ((price - allTimeHigh) / allTimeHigh) * 100
