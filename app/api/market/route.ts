@@ -26,7 +26,7 @@ async function fetchChart(symbol: string, range: string, interval: string) {
     chart: {
       result: Array<{
         meta: Record<string, number | string>;
-        indicators: { quote: Array<{ close: (number | null)[] }> };
+        indicators: { quote: Array<{ close: (number | null)[]; high: (number | null)[] }> };
       }> | null;
       error: { description: string } | null;
     };
