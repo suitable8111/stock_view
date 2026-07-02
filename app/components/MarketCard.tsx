@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 export interface MarketData {
   symbol: string;
   name: string;
@@ -56,11 +58,12 @@ const sizes = {
     badge: "text-[10px] px-1.5 py-0.5",
     price: "text-2xl",
     change: "text-xs",
+    ath: "text-xs",
+    athLabel: "text-[10px]",
     statLabel: "text-[10px]",
     statVal: "text-xs",
     ts: "text-[9px]",
-    gap: "gap-1.5",
-    dividerPt: "pt-2 mt-2",
+    toggleText: "text-[10px]",
   },
   normal: {
     pad: "p-4",
@@ -70,11 +73,12 @@ const sizes = {
     badge: "text-xs px-2 py-0.5",
     price: "text-4xl",
     change: "text-sm",
+    ath: "text-sm",
+    athLabel: "text-xs",
     statLabel: "text-xs",
     statVal: "text-sm",
     ts: "text-[10px]",
-    gap: "gap-2",
-    dividerPt: "pt-3 mt-3",
+    toggleText: "text-xs",
   },
   large: {
     pad: "p-5",
@@ -84,15 +88,31 @@ const sizes = {
     badge: "text-sm px-2.5 py-1",
     price: "text-5xl",
     change: "text-lg",
+    ath: "text-base",
+    athLabel: "text-sm",
     statLabel: "text-sm",
     statVal: "text-base",
     ts: "text-xs",
-    gap: "gap-3",
-    dividerPt: "pt-3 mt-3",
+    toggleText: "text-sm",
   },
 } as const;
 
+function AthColor(drawdown: number | null) {
+  if (drawdown === null) return "text-gray-500";
+  if (drawdown >= -0.5) return "text-green-400";
+  if (drawdown >= -10) return "text-yellow-400";
+  return "text-orange-400";
+}
+
+function AthText(drawdown: number | null) {
+  if (drawdown === null) return "—";
+  if (drawdown >= -0.5) return "0.00% (역대 고점)";
+  return `${drawdown.toFixed(2)}%`;
+}
+
 export default function MarketCard({ data, size = "small" }: { data: MarketData; size?: SizeMode }) {
+  const [showDetail, setShowDetail] = useState(false);
+
   const isUp = (data.change ?? 0) >= 0;
   const upColor = isUp ? "text-red-400" : "text-blue-400";
   const bgAccent = isUp ? "from-red-500/10" : "from-blue-500/10";
@@ -101,12 +121,20 @@ export default function MarketCard({ data, size = "small" }: { data: MarketData;
   const { label, color: stateColor } = marketStateLabel(data.marketState);
   const s = sizes[size];
 
+  const STATS = [
+    { l: "시가",     v: formatPrice(data.open, data.market),          c: "text-gray-200" },
+    { l: "전일 종가", v: formatPrice(data.previousClose, data.market), c: "text-gray-200" },
+    { l: "고가",     v: formatPrice(data.high, data.market),           c: "text-red-300" },
+    { l: "저가",     v: formatPrice(data.low, data.market),            c: "text-blue-300" },
+    { l: "거래량",   v: formatVolume(data.volume),                     c: "text-gray-200" },
+  ];
+
   return (
     <div className={`rounded-2xl border ${borderColor} bg-gradient-to-br ${bgAccent} to-transparent
       flex flex-col h-full min-h-0 overflow-hidden ${s.pad}`}>
 
-      {/* 상단: 이름 + 상태 */}
-      <div className={`flex items-center justify-between shrink-0 ${s.gap}`}>
+      {/* ① 이름 + 상태 */}
+      <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className={s.flag}>{FLAG[data.market]}</span>
           <span className={`${s.name} font-bold text-white truncate`}>{data.name}</span>
@@ -115,8 +143,8 @@ export default function MarketCard({ data, size = "small" }: { data: MarketData;
         <span className={`${s.badge} font-semibold rounded-full bg-white/5 shrink-0 ${stateColor}`}>{label}</span>
       </div>
 
-      {/* 가격 */}
-      <div className={`shrink-0 ${s.gap} mt-2`}>
+      {/* ② 가격 */}
+      <div className="shrink-0 mt-2">
         <p className={`${s.price} font-bold text-white tracking-tight leading-none`}>
           {formatPrice(data.price, data.market)}
         </p>
@@ -125,44 +153,46 @@ export default function MarketCard({ data, size = "small" }: { data: MarketData;
         </p>
       </div>
 
-      {/* 하단 통계 */}
-      <div className={`border-t border-white/10 ${s.dividerPt} flex-1 min-h-0 overflow-hidden`}>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          {[
-            { l: "시가", v: formatPrice(data.open, data.market), c: "text-gray-200" },
-            { l: "전일 종가", v: formatPrice(data.previousClose, data.market), c: "text-gray-200" },
-            { l: "고가", v: formatPrice(data.high, data.market), c: "text-red-300" },
-            { l: "저가", v: formatPrice(data.low, data.market), c: "text-blue-300" },
-            { l: "거래량", v: formatVolume(data.volume), c: "text-gray-200" },
-          ].map(({ l, v, c }) => (
-            <div key={l} className={l === "거래량" ? "col-span-2" : ""}>
-              <span className={`${s.statLabel} text-gray-600`}>{l}</span>
-              <p className={`${s.statVal} ${c} font-medium leading-tight`}>{v}</p>
-            </div>
-          ))}
-          {/* ATH 낙폭 */}
-          <div className="col-span-2 border-t border-white/10 pt-1 mt-0.5">
-            <span className={`${s.statLabel} text-gray-600`}>역대 고점 대비</span>
-            <p className={`${s.statVal} font-semibold leading-tight ${
-              data.athDrawdown === null ? "text-gray-500"
-              : data.athDrawdown >= -0.5 ? "text-green-400"
-              : data.athDrawdown >= -10 ? "text-yellow-400"
-              : "text-orange-400"
-            }`}>
-              {data.athDrawdown === null
-                ? "—"
-                : data.athDrawdown >= -0.5
-                ? "0.00% (역대 고점)"
-                : `${data.athDrawdown.toFixed(2)}%`}
-            </p>
-          </div>
-        </div>
-        {data.timestamp && (
-          <p className={`${s.ts} text-gray-700 text-right mt-1.5`}>
-            {new Date(data.timestamp).toLocaleString("ko-KR")} 기준
-          </p>
-        )}
+      {/* ③ 역대 고점 대비 — 항상 표시 */}
+      <div className="shrink-0 mt-2.5 pt-2.5 border-t border-white/10">
+        <p className={`${s.athLabel} text-gray-500`}>역대 고점 대비</p>
+        <p className={`${s.ath} font-bold mt-0.5 ${AthColor(data.athDrawdown)}`}>
+          {AthText(data.athDrawdown)}
+        </p>
       </div>
+
+      {/* ④ 상세 토글 버튼 */}
+      <button
+        onClick={() => setShowDetail((v) => !v)}
+        className={`shrink-0 mt-2 flex items-center gap-1 text-gray-600 hover:text-gray-400 transition-colors self-start ${s.toggleText}`}
+      >
+        <svg
+          className={`w-3 h-3 transition-transform duration-200 ${showDetail ? "rotate-180" : ""}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+        {showDetail ? "접기" : "상세"}
+      </button>
+
+      {/* ⑤ 상세 통계 — 토글 */}
+      {showDetail && (
+        <div className="mt-2 pt-2 border-t border-white/10 min-h-0 overflow-hidden">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {STATS.map(({ l, v, c }) => (
+              <div key={l} className={l === "거래량" ? "col-span-2" : ""}>
+                <span className={`${s.statLabel} text-gray-600`}>{l}</span>
+                <p className={`${s.statVal} ${c} font-medium leading-tight`}>{v}</p>
+              </div>
+            ))}
+          </div>
+          {data.timestamp && (
+            <p className={`${s.ts} text-gray-700 text-right mt-1.5`}>
+              {new Date(data.timestamp).toLocaleString("ko-KR")} 기준
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
