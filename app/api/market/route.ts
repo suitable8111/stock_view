@@ -3,10 +3,10 @@ export const runtime = "edge";
 import { NextResponse } from "next/server";
 
 const SYMBOLS = [
+  { symbol: "^GSPC", name: "S&P 500", market: "US" },
+  { symbol: "^IXIC", name: "NASDAQ", market: "US" },
   { symbol: "^KS11", name: "KOSPI", market: "KR" },
   { symbol: "^KQ11", name: "KOSDAQ", market: "KR" },
-  { symbol: "^IXIC", name: "NASDAQ", market: "US" },
-  { symbol: "^GSPC", name: "S&P 500", market: "US" },
 ];
 
 async function fetchChart(symbol: string) {
