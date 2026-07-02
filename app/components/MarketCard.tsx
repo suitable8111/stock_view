@@ -37,13 +37,13 @@ function formatVolume(v: number | null): string {
 function marketStateLabel(state: string): { label: string; color: string } {
   switch (state) {
     case "REGULAR": return { label: "장중", color: "text-green-400" };
-    case "PRE": return { label: "장전", color: "text-yellow-400" };
-    case "POST": return { label: "장후", color: "text-blue-400" };
-    default: return { label: "휴장", color: "text-gray-500" };
+    case "PRE":     return { label: "장전", color: "text-yellow-400" };
+    case "POST":    return { label: "장후", color: "text-blue-400" };
+    default:        return { label: "휴장", color: "text-gray-500" };
   }
 }
 
-export default function MarketCard({ data }: { data: MarketData }) {
+export default function MarketCard({ data, large = false }: { data: MarketData; large?: boolean }) {
   const isUp = (data.change ?? 0) >= 0;
   const color = isUp ? "text-red-400" : "text-blue-400";
   const bgAccent = isUp ? "from-red-500/10" : "from-blue-500/10";
@@ -53,60 +53,61 @@ export default function MarketCard({ data }: { data: MarketData }) {
 
   return (
     <div
-      className={`relative rounded-2xl border ${borderColor} bg-gradient-to-br ${bgAccent} to-transparent backdrop-blur-sm p-6 flex flex-col gap-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg`}
+      className={`relative rounded-2xl border ${borderColor} bg-gradient-to-br ${bgAccent} to-transparent backdrop-blur-sm flex flex-col gap-5 transition-all duration-300 hover:scale-[1.01] hover:shadow-lg
+        ${large ? "p-10" : "p-7"}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xl">{FLAG[data.market]}</span>
-            <span className="text-lg font-bold text-white">{data.name}</span>
+            <span className={large ? "text-3xl" : "text-2xl"}>{FLAG[data.market]}</span>
+            <span className={`font-bold text-white ${large ? "text-3xl" : "text-xl"}`}>{data.name}</span>
           </div>
-          <span className="text-xs text-gray-500 mt-0.5 block">{data.symbol}</span>
+          <span className={`text-gray-500 mt-1 block ${large ? "text-base" : "text-sm"}`}>{data.symbol}</span>
         </div>
-        <span className={`text-xs font-medium px-2 py-1 rounded-full bg-white/5 ${stateColor}`}>
+        <span className={`font-semibold px-3 py-1 rounded-full bg-white/5 ${stateColor} ${large ? "text-base" : "text-sm"}`}>
           {label}
         </span>
       </div>
 
       {/* Price */}
       <div>
-        <p className="text-3xl font-bold text-white tracking-tight">
+        <p className={`font-bold text-white tracking-tight ${large ? "text-7xl" : "text-4xl"}`}>
           {formatPrice(data.price, data.market)}
         </p>
-        <p className={`text-sm font-medium mt-1 ${color}`}>
+        <p className={`font-semibold mt-2 ${color} ${large ? "text-2xl" : "text-lg"}`}>
           {sign}{formatPrice(data.change, data.market)}&nbsp;
           ({sign}{(data.changePercent ?? 0).toFixed(2)}%)
         </p>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-gray-400 border-t border-white/10 pt-4">
+      <div className={`grid grid-cols-2 gap-x-6 gap-y-3 border-t border-white/10 pt-5 ${large ? "text-lg" : "text-sm"}`}>
         <div>
-          <span className="text-gray-600">시가</span>
-          <p className="text-gray-300">{formatPrice(data.open, data.market)}</p>
+          <span className="text-gray-500">시가</span>
+          <p className={`text-gray-200 font-medium ${large ? "text-xl mt-1" : "mt-0.5"}`}>{formatPrice(data.open, data.market)}</p>
         </div>
         <div>
-          <span className="text-gray-600">전일 종가</span>
-          <p className="text-gray-300">{formatPrice(data.previousClose, data.market)}</p>
+          <span className="text-gray-500">전일 종가</span>
+          <p className={`text-gray-200 font-medium ${large ? "text-xl mt-1" : "mt-0.5"}`}>{formatPrice(data.previousClose, data.market)}</p>
         </div>
         <div>
-          <span className="text-gray-600">고가</span>
-          <p className="text-red-300">{formatPrice(data.high, data.market)}</p>
+          <span className="text-gray-500">고가</span>
+          <p className={`text-red-300 font-medium ${large ? "text-xl mt-1" : "mt-0.5"}`}>{formatPrice(data.high, data.market)}</p>
         </div>
         <div>
-          <span className="text-gray-600">저가</span>
-          <p className="text-blue-300">{formatPrice(data.low, data.market)}</p>
+          <span className="text-gray-500">저가</span>
+          <p className={`text-blue-300 font-medium ${large ? "text-xl mt-1" : "mt-0.5"}`}>{formatPrice(data.low, data.market)}</p>
         </div>
         <div className="col-span-2">
-          <span className="text-gray-600">거래량</span>
-          <p className="text-gray-300">{formatVolume(data.volume)}</p>
+          <span className="text-gray-500">거래량</span>
+          <p className={`text-gray-200 font-medium ${large ? "text-xl mt-1" : "mt-0.5"}`}>{formatVolume(data.volume)}</p>
         </div>
       </div>
 
       {/* Timestamp */}
       {data.timestamp && (
-        <p className="text-[10px] text-gray-600 text-right -mt-2">
+        <p className={`text-gray-600 text-right -mt-2 ${large ? "text-sm" : "text-xs"}`}>
           {new Date(data.timestamp).toLocaleString("ko-KR")} 기준
         </p>
       )}
