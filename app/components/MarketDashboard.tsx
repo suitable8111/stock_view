@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import MarketCard from "./MarketCard";
+import MarketCard, { type SizeMode } from "./MarketCard";
 
 interface MarketData {
   symbol: string;
@@ -17,9 +17,16 @@ interface MarketData {
   previousClose: number | null;
   marketState: string;
   timestamp: string | null;
+  allTimeHigh: number | null;
+  athDrawdown: number | null;
 }
 
 const REFRESH_INTERVAL = 30_000;
+const SIZE_MODES: { key: SizeMode; label: string }[] = [
+  { key: "small",  label: "작게" },
+  { key: "normal", label: "보통" },
+  { key: "large",  label: "크게" },
+];
 
 export default function MarketDashboard() {
   const [data, setData] = useState<MarketData[]>([]);
@@ -27,7 +34,7 @@ export default function MarketDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
-  const [large, setLarge] = useState(false);
+  const [size, setSize] = useState<SizeMode>("small");
 
   const fetchData = useCallback(async () => {
     try {
@@ -58,41 +65,36 @@ export default function MarketDashboard() {
   }, [fetchedAt]);
 
   return (
-    /* 100dvh: 모바일 주소창 제외한 실제 뷰포트 */
     <div className="h-[100dvh] flex flex-col bg-[#0a0a0f]">
 
       {/* 헤더 */}
       <header className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-white/5">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-bold text-white">📈 글로벌 시황</span>
-        </div>
+        <span className="text-lg font-bold text-white">📈 글로벌 시황</span>
+
         <div className="flex items-center gap-2">
           {fetchedAt && (
             <span className="text-[11px] text-gray-600 hidden sm:block">
               {new Date(fetchedAt).toLocaleString("ko-KR")} 조회
             </span>
           )}
-          <button
-            onClick={() => setLarge((v) => !v)}
-            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition
-              ${large ? "bg-white/15 border-white/30 text-white" : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"}`}
-          >
-            {large ? (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0zM9 11h4" />
-                </svg>
-                격자
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 105 11a6 6 0 0012 0zM11 8v6M8 11h6" />
-                </svg>
-                크게
-              </>
-            )}
-          </button>
+
+          {/* 크기 토글 */}
+          <div className="flex rounded-lg overflow-hidden border border-white/10">
+            {SIZE_MODES.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setSize(key)}
+                className={`px-2.5 py-1.5 text-xs font-medium transition
+                  ${size === key
+                    ? "bg-white/15 text-white"
+                    : "bg-white/0 text-gray-400 hover:bg-white/10"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* 새로고침 */}
           <button
             onClick={fetchData}
             disabled={loading}
@@ -107,31 +109,23 @@ export default function MarketDashboard() {
         </div>
       </header>
 
-      {/* 메인: 남은 공간 모두 차지, 스크롤 없음 */}
+      {/* 4격자 — 항상 2×2, 모바일/PC 동일 */}
       <main className="flex-1 min-h-0 p-2.5">
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-red-400 text-xs mb-2">
             {error}
           </div>
         )}
-
-        {large ? (
-          /* 크게 보기: 1열 스크롤 */
-          <div className="h-full overflow-y-auto space-y-3 pr-1">
-            {loading && data.length === 0
-              ? [...Array(4)].map((_, i) => <div key={i} className="rounded-2xl border border-white/10 bg-white/5 h-80 animate-pulse" />)
-              : data.map((item) => <MarketCard key={item.symbol} data={item} large />)
-            }
-          </div>
-        ) : (
-          /* 4격자: 2×2, 높이 꽉 채움, 모바일도 동일 */
-          <div className="h-full grid grid-cols-2 grid-rows-2 gap-2.5">
-            {loading && data.length === 0
-              ? [...Array(4)].map((_, i) => <div key={i} className="rounded-2xl border border-white/10 bg-white/5 animate-pulse" />)
-              : data.map((item) => <MarketCard key={item.symbol} data={item} />)
-            }
-          </div>
-        )}
+        <div className="h-full grid grid-cols-2 grid-rows-2 gap-2.5">
+          {loading && data.length === 0
+            ? [...Array(4)].map((_, i) => (
+                <div key={i} className="rounded-2xl border border-white/10 bg-white/5 animate-pulse" />
+              ))
+            : data.map((item) => (
+                <MarketCard key={item.symbol} data={item} size={size} />
+              ))
+          }
+        </div>
       </main>
     </div>
   );

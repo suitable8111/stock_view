@@ -1,6 +1,6 @@
 "use client";
 
-interface MarketData {
+export interface MarketData {
   symbol: string;
   name: string;
   market: string;
@@ -14,7 +14,11 @@ interface MarketData {
   previousClose: number | null;
   marketState: string;
   timestamp: string | null;
+  allTimeHigh: number | null;
+  athDrawdown: number | null;
 }
+
+export type SizeMode = "small" | "normal" | "large";
 
 const FLAG: Record<string, string> = { KR: "🇰🇷", US: "🇺🇸" };
 
@@ -43,35 +47,87 @@ function marketStateLabel(state: string): { label: string; color: string } {
   }
 }
 
-export default function MarketCard({ data, large = false }: { data: MarketData; large?: boolean }) {
+const sizes = {
+  small: {
+    pad: "p-3",
+    flag: "text-base",
+    name: "text-sm",
+    symbol: "text-[10px]",
+    badge: "text-[10px] px-1.5 py-0.5",
+    price: "text-2xl",
+    change: "text-xs",
+    statLabel: "text-[10px]",
+    statVal: "text-xs",
+    ts: "text-[9px]",
+    gap: "gap-1.5",
+    dividerPt: "pt-2 mt-2",
+  },
+  normal: {
+    pad: "p-4",
+    flag: "text-xl",
+    name: "text-base",
+    symbol: "text-xs",
+    badge: "text-xs px-2 py-0.5",
+    price: "text-4xl",
+    change: "text-sm",
+    statLabel: "text-xs",
+    statVal: "text-sm",
+    ts: "text-[10px]",
+    gap: "gap-2",
+    dividerPt: "pt-3 mt-3",
+  },
+  large: {
+    pad: "p-5",
+    flag: "text-2xl",
+    name: "text-xl",
+    symbol: "text-sm",
+    badge: "text-sm px-2.5 py-1",
+    price: "text-5xl",
+    change: "text-lg",
+    statLabel: "text-sm",
+    statVal: "text-base",
+    ts: "text-xs",
+    gap: "gap-3",
+    dividerPt: "pt-3 mt-3",
+  },
+} as const;
+
+export default function MarketCard({ data, size = "small" }: { data: MarketData; size?: SizeMode }) {
   const isUp = (data.change ?? 0) >= 0;
   const upColor = isUp ? "text-red-400" : "text-blue-400";
   const bgAccent = isUp ? "from-red-500/10" : "from-blue-500/10";
   const borderColor = isUp ? "border-red-500/20" : "border-blue-500/20";
   const sign = isUp ? "+" : "";
   const { label, color: stateColor } = marketStateLabel(data.marketState);
+  const s = sizes[size];
 
-  /* ── 크게 보기 ── */
-  if (large) {
-    return (
-      <div className={`rounded-2xl border ${borderColor} bg-gradient-to-br ${bgAccent} to-transparent p-10 flex flex-col gap-5`}>
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">{FLAG[data.market]}</span>
-              <span className="text-3xl font-bold text-white">{data.name}</span>
-            </div>
-            <span className="text-base text-gray-500 mt-1 block">{data.symbol}</span>
-          </div>
-          <span className={`text-base font-semibold px-3 py-1 rounded-full bg-white/5 ${stateColor}`}>{label}</span>
+  return (
+    <div className={`rounded-2xl border ${borderColor} bg-gradient-to-br ${bgAccent} to-transparent
+      flex flex-col h-full min-h-0 overflow-hidden ${s.pad}`}>
+
+      {/* 상단: 이름 + 상태 */}
+      <div className={`flex items-center justify-between shrink-0 ${s.gap}`}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className={s.flag}>{FLAG[data.market]}</span>
+          <span className={`${s.name} font-bold text-white truncate`}>{data.name}</span>
+          <span className={`${s.symbol} text-gray-600 hidden sm:inline`}>{data.symbol}</span>
         </div>
-        <div>
-          <p className="text-7xl font-bold text-white tracking-tight">{formatPrice(data.price, data.market)}</p>
-          <p className={`text-2xl font-semibold mt-2 ${upColor}`}>
-            {sign}{formatPrice(data.change, data.market)} ({sign}{(data.changePercent ?? 0).toFixed(2)}%)
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3 border-t border-white/10 pt-5 text-lg">
+        <span className={`${s.badge} font-semibold rounded-full bg-white/5 shrink-0 ${stateColor}`}>{label}</span>
+      </div>
+
+      {/* 가격 */}
+      <div className={`shrink-0 ${s.gap} mt-2`}>
+        <p className={`${s.price} font-bold text-white tracking-tight leading-none`}>
+          {formatPrice(data.price, data.market)}
+        </p>
+        <p className={`${s.change} font-semibold mt-1.5 ${upColor}`}>
+          {sign}{formatPrice(data.change, data.market)}&nbsp;({sign}{(data.changePercent ?? 0).toFixed(2)}%)
+        </p>
+      </div>
+
+      {/* 하단 통계 */}
+      <div className={`border-t border-white/10 ${s.dividerPt} flex-1 min-h-0 overflow-hidden`}>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
           {[
             { l: "시가", v: formatPrice(data.open, data.market), c: "text-gray-200" },
             { l: "전일 종가", v: formatPrice(data.previousClose, data.market), c: "text-gray-200" },
@@ -80,70 +136,29 @@ export default function MarketCard({ data, large = false }: { data: MarketData; 
             { l: "거래량", v: formatVolume(data.volume), c: "text-gray-200" },
           ].map(({ l, v, c }) => (
             <div key={l} className={l === "거래량" ? "col-span-2" : ""}>
-              <span className="text-gray-500">{l}</span>
-              <p className={`text-xl font-medium mt-1 ${c}`}>{v}</p>
+              <span className={`${s.statLabel} text-gray-600`}>{l}</span>
+              <p className={`${s.statVal} ${c} font-medium leading-tight`}>{v}</p>
             </div>
           ))}
-        </div>
-        {data.timestamp && (
-          <p className="text-sm text-gray-600 text-right">{new Date(data.timestamp).toLocaleString("ko-KR")} 기준</p>
-        )}
-      </div>
-    );
-  }
-
-  /* ── 4격자 카드: 셀 높이에 맞게 compact ── */
-  return (
-    <div className={`rounded-2xl border ${borderColor} bg-gradient-to-br ${bgAccent} to-transparent
-      flex flex-col h-full min-h-0 overflow-hidden p-4`}>
-
-      {/* 상단: 이름 + 상태 */}
-      <div className="flex items-center justify-between mb-2 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xl">{FLAG[data.market]}</span>
-          <span className="text-base font-bold text-white">{data.name}</span>
-          <span className="text-xs text-gray-600">{data.symbol}</span>
-        </div>
-        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full bg-white/5 ${stateColor}`}>{label}</span>
-      </div>
-
-      {/* 가격 */}
-      <div className="shrink-0">
-        <p className="text-4xl font-bold text-white tracking-tight leading-none">
-          {formatPrice(data.price, data.market)}
-        </p>
-        <p className={`text-base font-semibold mt-2 ${upColor}`}>
-          {sign}{formatPrice(data.change, data.market)}&nbsp;
-          <span className="text-sm">({sign}{(data.changePercent ?? 0).toFixed(2)}%)</span>
-        </p>
-      </div>
-
-      {/* 구분선 */}
-      <div className="border-t border-white/10 mt-3 pt-3 flex-1 min-h-0 overflow-hidden">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-          <div>
-            <span className="text-gray-600">시가</span>
-            <p className="text-gray-200 font-medium">{formatPrice(data.open, data.market)}</p>
-          </div>
-          <div>
-            <span className="text-gray-600">전일 종가</span>
-            <p className="text-gray-200 font-medium">{formatPrice(data.previousClose, data.market)}</p>
-          </div>
-          <div>
-            <span className="text-gray-600">고가</span>
-            <p className="text-red-300 font-medium">{formatPrice(data.high, data.market)}</p>
-          </div>
-          <div>
-            <span className="text-gray-600">저가</span>
-            <p className="text-blue-300 font-medium">{formatPrice(data.low, data.market)}</p>
-          </div>
-          <div className="col-span-2">
-            <span className="text-gray-600">거래량</span>
-            <p className="text-gray-200 font-medium">{formatVolume(data.volume)}</p>
+          {/* ATH 낙폭 */}
+          <div className="col-span-2 border-t border-white/10 pt-1 mt-0.5">
+            <span className={`${s.statLabel} text-gray-600`}>역대 고점 대비</span>
+            <p className={`${s.statVal} font-semibold leading-tight ${
+              data.athDrawdown === null ? "text-gray-500"
+              : data.athDrawdown >= -0.5 ? "text-green-400"
+              : data.athDrawdown >= -10 ? "text-yellow-400"
+              : "text-orange-400"
+            }`}>
+              {data.athDrawdown === null
+                ? "—"
+                : data.athDrawdown >= -0.5
+                ? "0.00% (역대 고점)"
+                : `${data.athDrawdown.toFixed(2)}%`}
+            </p>
           </div>
         </div>
         {data.timestamp && (
-          <p className="text-[10px] text-gray-700 text-right mt-2">
+          <p className={`${s.ts} text-gray-700 text-right mt-1.5`}>
             {new Date(data.timestamp).toLocaleString("ko-KR")} 기준
           </p>
         )}
