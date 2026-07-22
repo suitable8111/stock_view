@@ -20,28 +20,41 @@ export default function MarketDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
   const [size, setSize] = useState<SizeMode>("small");
-  const [customSymbols, setCustomSymbols] = useState<string[]>([]);
+  const [customSymbol, setCustomSymbol] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Load custom symbols from localStorage after hydration
+  // Load from localStorage after hydration (handle both old array format and new string format)
   useEffect(() => {
     try {
       const saved = localStorage.getItem("stock-view-custom");
-      if (saved) setCustomSymbols(JSON.parse(saved));
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCustomSymbol(parsed[parsed.length - 1]);
+          }
+        } catch {
+          setCustomSymbol(saved);
+        }
+      }
     } catch {}
     setMounted(true);
   }, []);
 
-  // Persist custom symbols to localStorage
+  // Persist to localStorage
   useEffect(() => {
     if (!mounted) return;
-    localStorage.setItem("stock-view-custom", JSON.stringify(customSymbols));
-  }, [customSymbols, mounted]);
+    if (customSymbol) {
+      localStorage.setItem("stock-view-custom", customSymbol);
+    } else {
+      localStorage.removeItem("stock-view-custom");
+    }
+  }, [customSymbol, mounted]);
 
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const extra = customSymbols.length > 0 ? `?extra=${customSymbols.join(",")}` : "";
+      const extra = customSymbol ? `?extra=${customSymbol}` : "";
       const res = await fetch(`/api/market${extra}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
@@ -54,9 +67,8 @@ export default function MarketDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [customSymbols]);
+  }, [customSymbol]);
 
-  // Start fetching only after localStorage is loaded (mounted)
   useEffect(() => {
     if (!mounted) return;
     fetchData();
@@ -69,19 +81,21 @@ export default function MarketDashboard() {
     return () => clearInterval(tick);
   }, [fetchedAt]);
 
-  const addSymbol = useCallback((symbol: string) => {
+  const setSymbol = useCallback((symbol: string) => {
     if (DEFAULT_SYMBOL_SET.has(symbol)) return;
-    setCustomSymbols((prev) => (prev.includes(symbol) ? prev : [...prev, symbol]));
+    setCustomSymbol(symbol);
+    // 이전 카드 즉시 제거해서 스켈레톤으로 전환
+    setData((prev) => prev.filter((d) => DEFAULT_SYMBOL_SET.has(d.symbol)));
   }, []);
 
-  const removeSymbol = useCallback((symbol: string) => {
-    setCustomSymbols((prev) => prev.filter((s) => s !== symbol));
-    setData((prev) => prev.filter((d) => d.symbol !== symbol));
+  const clearSymbol = useCallback(() => {
+    setCustomSymbol(null);
+    setData((prev) => prev.filter((d) => DEFAULT_SYMBOL_SET.has(d.symbol)));
   }, []);
 
   const defaultData = data.filter((d) => DEFAULT_SYMBOL_SET.has(d.symbol));
-  const customData = data.filter((d) => !DEFAULT_SYMBOL_SET.has(d.symbol));
-  const allExisting = new Set([...DEFAULT_SYMBOLS, ...customSymbols]);
+  const customItem = data.find((d) => !DEFAULT_SYMBOL_SET.has(d.symbol)) ?? null;
+  const allExisting = new Set([...DEFAULT_SYMBOLS, ...(customSymbol ? [customSymbol] : [])]);
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[#0a0a0f]">
@@ -146,31 +160,19 @@ export default function MarketDashboard() {
         {/* 검색 입력 */}
         <div className="shrink-0 px-3 pt-2.5 pb-2">
           <p className="text-xs font-semibold text-gray-500 mb-2">종목검색</p>
-          <StockSearch onAdd={addSymbol} existingSymbols={allExisting} />
+          <StockSearch onAdd={setSymbol} existingSymbols={allExisting} />
         </div>
 
-        {/* 추가된 종목 목록 */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 space-y-2">
-          {customSymbols.length === 0 ? (
+        {/* 검색된 종목 — 하나만 표시 */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2">
+          {!customSymbol ? (
             <p className="text-xs text-gray-700 text-center pt-3">
               종목을 검색하여 추가하세요
             </p>
+          ) : customItem ? (
+            <SearchResultCard data={customItem} onRemove={clearSymbol} />
           ) : (
-            <>
-              {/* Skeleton for symbols not yet loaded */}
-              {customSymbols
-                .filter((s) => !customData.find((d) => d.symbol === s))
-                .map((s) => (
-                  <div key={s} className="rounded-xl border border-white/10 bg-white/5 animate-pulse h-[88px]" />
-                ))}
-              {customData.map((item) => (
-                <SearchResultCard
-                  key={item.symbol}
-                  data={item}
-                  onRemove={() => removeSymbol(item.symbol)}
-                />
-              ))}
-            </>
+            <div className="rounded-xl border border-white/10 bg-white/5 animate-pulse h-[88px]" />
           )}
         </div>
       </div>
