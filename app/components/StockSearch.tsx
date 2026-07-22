@@ -48,7 +48,7 @@ export default function StockSearch({ onAdd, existingSymbols }: Props) {
   // Debounced auto-search (500ms, min 2 chars)
   useEffect(() => {
     clearTimeout(timerRef.current);
-    if (query.trim().length >= 2) {
+    if (query.trim().length >= 1) {
       timerRef.current = setTimeout(() => doSearch(query), 500);
     } else {
       setResults([]);
