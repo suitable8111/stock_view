@@ -37,58 +37,92 @@ async function fetchChart(symbol: string, range: string, interval: string) {
   return result;
 }
 
-export async function GET() {
+async function fetchSymbolData(symbol: string, defaultName?: string, defaultMarket?: string) {
+  const [current, history] = await Promise.all([
+    fetchChart(symbol, "1d", "1m"),
+    fetchChart(symbol, "max", "1mo"),
+  ]);
+
+  const meta = current.meta;
+  const price = meta.regularMarketPrice as number;
+  const prevClose = (meta.chartPreviousClose ?? meta.previousClose) as number;
+  const change = price - prevClose;
+  const changePercent = prevClose ? (change / prevClose) * 100 : 0;
+
+  const name = defaultName ?? ((meta.shortName as string) || (meta.longName as string) || symbol);
+  const currency = (meta.currency as string) ?? "";
+  const market = defaultMarket ?? (currency === "KRW" ? "KR" : "US");
+
+  const highs = history.indicators?.quote?.[0]?.high ?? [];
+  const validHighs = highs.filter((v): v is number => v !== null && !isNaN(v));
+  const currentHigh = meta.regularMarketDayHigh as number | undefined;
+  if (currentHigh) validHighs.push(currentHigh);
+  const allTimeHigh = validHighs.length > 0 ? Math.max(...validHighs) : null;
+  const athDrawdown =
+    allTimeHigh !== null && allTimeHigh > 0
+      ? ((price - allTimeHigh) / allTimeHigh) * 100
+      : null;
+
+  return {
+    symbol,
+    name,
+    market,
+    price,
+    change,
+    changePercent,
+    open: (meta.regularMarketDayOpen as number) ?? null,
+    high: (meta.regularMarketDayHigh as number) ?? null,
+    low: (meta.regularMarketDayLow as number) ?? null,
+    volume: (meta.regularMarketVolume as number) ?? null,
+    previousClose: prevClose ?? null,
+    marketState: (meta.marketState as string) ?? "CLOSED",
+    timestamp: meta.regularMarketTime
+      ? new Date((meta.regularMarketTime as number) * 1000).toISOString()
+      : null,
+    allTimeHigh,
+    athDrawdown,
+  };
+}
+
+export async function GET(req: Request) {
   try {
-    const results = await Promise.all(
-      SYMBOLS.map(async ({ symbol, name, market }) => {
-        // 현재가 + 역대 최고가를 병렬 조회
-        const [current, history] = await Promise.all([
-          fetchChart(symbol, "1d", "1m"),
-          fetchChart(symbol, "max", "1mo"),
-        ]);
+    const { searchParams } = new URL(req.url);
+    const extraParam = searchParams.get("extra");
+    const extraRaw = extraParam ? extraParam.split(",").filter(Boolean) : [];
+    const defaultSet = new Set(SYMBOLS.map((s) => s.symbol));
+    const extraSymbols = extraRaw.filter((s) => !defaultSet.has(s));
 
-        const meta = current.meta;
-        const price = meta.regularMarketPrice as number;
-        const prevClose = (meta.chartPreviousClose ?? meta.previousClose) as number;
-        const change = price - prevClose;
-        const changePercent = prevClose ? (change / prevClose) * 100 : 0;
+    // Default 4 symbols: fail-fast (return 500 if any fails)
+    const defaultResults = await Promise.all(
+      SYMBOLS.map(({ symbol, name, market }) => fetchSymbolData(symbol, name, market))
+    );
 
-        // 역대 고점 계산 — 월간 고가(high) 기준으로 장중 피크까지 포함
-        const highs = history.indicators?.quote?.[0]?.high ?? [];
-        const validHighs = highs.filter((v): v is number => v !== null && !isNaN(v));
-        // 현재 장중 고가도 후보에 포함
-        const currentHigh = meta.regularMarketDayHigh as number | undefined;
-        if (currentHigh) validHighs.push(currentHigh);
-        const allTimeHigh = validHighs.length > 0 ? Math.max(...validHighs) : null;
-        const athDrawdown =
-          allTimeHigh !== null && allTimeHigh > 0
-            ? ((price - allTimeHigh) / allTimeHigh) * 100
-            : null;
-
-        return {
+    // Extra custom symbols: fail per-symbol, don't break the whole response
+    const extraResults = await Promise.all(
+      extraSymbols.map((symbol) =>
+        fetchSymbolData(symbol).catch((err) => ({
           symbol,
-          name,
-          market,
-          price,
-          change,
-          changePercent,
-          open: (meta.regularMarketDayOpen as number) ?? null,
-          high: (meta.regularMarketDayHigh as number) ?? null,
-          low: (meta.regularMarketDayLow as number) ?? null,
-          volume: (meta.regularMarketVolume as number) ?? null,
-          previousClose: prevClose ?? null,
-          marketState: (meta.marketState as string) ?? "CLOSED",
-          timestamp: meta.regularMarketTime
-            ? new Date((meta.regularMarketTime as number) * 1000).toISOString()
-            : null,
-          allTimeHigh,
-          athDrawdown,
-        };
-      })
+          name: symbol,
+          market: "US" as const,
+          price: null,
+          change: null,
+          changePercent: null,
+          open: null,
+          high: null,
+          low: null,
+          volume: null,
+          previousClose: null,
+          marketState: "CLOSED",
+          timestamp: null,
+          allTimeHigh: null,
+          athDrawdown: null,
+          fetchError: err instanceof Error ? err.message : String(err),
+        }))
+      )
     );
 
     return NextResponse.json(
-      { data: results, fetchedAt: new Date().toISOString() },
+      { data: [...defaultResults, ...extraResults], fetchedAt: new Date().toISOString() },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {

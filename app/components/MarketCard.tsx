@@ -18,6 +18,7 @@ export interface MarketData {
   timestamp: string | null;
   allTimeHigh: number | null;
   athDrawdown: number | null;
+  fetchError?: string;
 }
 
 export type SizeMode = "small" | "normal" | "large";
@@ -108,6 +109,64 @@ function AthText(drawdown: number | null) {
   if (drawdown === null) return "—";
   if (drawdown >= -0.5) return "0.00% (역대 고점)";
   return `${drawdown.toFixed(2)}%`;
+}
+
+export function SearchResultCard({ data, onRemove }: { data: MarketData; onRemove: () => void }) {
+  if (data.fetchError) {
+    return (
+      <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2.5 flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-400 font-medium">{data.symbol}</p>
+          <p className="text-[11px] text-red-500/60 mt-0.5">조회 실패</p>
+        </div>
+        <button
+          onClick={onRemove}
+          className="w-6 h-6 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-500/20 text-gray-600 hover:text-red-400 transition-colors"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
+  const isUp = (data.change ?? 0) >= 0;
+  const upColor = isUp ? "text-red-400" : "text-blue-400";
+  const sign = isUp ? "+" : "";
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 relative">
+      <button
+        onClick={onRemove}
+        className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-white/5 hover:bg-red-500/20 text-gray-600 hover:text-red-400 transition-colors"
+      >
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
+      <div className="pr-7">
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-base">{FLAG[data.market] ?? "🌐"}</span>
+          <span className="text-sm font-bold text-white">{data.symbol}</span>
+          <span className="text-xs text-gray-500 truncate">{data.name}</span>
+        </div>
+        <p className="text-2xl font-bold text-white leading-none">
+          {formatPrice(data.price, data.market)}
+        </p>
+        <p className={`text-xs font-semibold mt-1 ${upColor}`}>
+          {sign}{formatPrice(data.change, data.market)}&nbsp;({sign}{(data.changePercent ?? 0).toFixed(2)}%)
+        </p>
+        <div className="mt-2 pt-2 border-t border-white/10">
+          <p className="text-[10px] text-gray-500">역대 고점 대비</p>
+          <p className={`text-xs font-bold mt-0.5 ${AthColor(data.athDrawdown)}`}>
+            {AthText(data.athDrawdown)}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function MarketCard({ data, size = "small" }: { data: MarketData; size?: SizeMode }) {

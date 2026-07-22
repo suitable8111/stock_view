@@ -1,26 +1,11 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import MarketCard, { type SizeMode } from "./MarketCard";
+import MarketCard, { SearchResultCard, type MarketData, type SizeMode } from "./MarketCard";
+import StockSearch from "./StockSearch";
 
-interface MarketData {
-  symbol: string;
-  name: string;
-  market: string;
-  price: number | null;
-  change: number | null;
-  changePercent: number | null;
-  open: number | null;
-  high: number | null;
-  low: number | null;
-  volume: number | null;
-  previousClose: number | null;
-  marketState: string;
-  timestamp: string | null;
-  allTimeHigh: number | null;
-  athDrawdown: number | null;
-}
-
+const DEFAULT_SYMBOLS = ["^GSPC", "^IXIC", "^KS11", "^KQ11"];
+const DEFAULT_SYMBOL_SET = new Set(DEFAULT_SYMBOLS);
 const REFRESH_INTERVAL = 30_000;
 const SIZE_MODES: { key: SizeMode; label: string }[] = [
   { key: "small",  label: "작게" },
@@ -35,14 +20,32 @@ export default function MarketDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(REFRESH_INTERVAL / 1000);
   const [size, setSize] = useState<SizeMode>("small");
+  const [customSymbols, setCustomSymbols] = useState<string[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // Load custom symbols from localStorage after hydration
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("stock-view-custom");
+      if (saved) setCustomSymbols(JSON.parse(saved));
+    } catch {}
+    setMounted(true);
+  }, []);
+
+  // Persist custom symbols to localStorage
+  useEffect(() => {
+    if (!mounted) return;
+    localStorage.setItem("stock-view-custom", JSON.stringify(customSymbols));
+  }, [customSymbols, mounted]);
 
   const fetchData = useCallback(async () => {
     try {
       setError(null);
-      const res = await fetch("/api/market");
+      const extra = customSymbols.length > 0 ? `?extra=${customSymbols.join(",")}` : "";
+      const res = await fetch(`/api/market${extra}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      setData(json.data);
+      setData(json.data ?? []);
       setFetchedAt(json.fetchedAt);
       setCountdown(REFRESH_INTERVAL / 1000);
     } catch (e) {
@@ -51,18 +54,34 @@ export default function MarketDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [customSymbols]);
 
+  // Start fetching only after localStorage is loaded (mounted)
   useEffect(() => {
+    if (!mounted) return;
     fetchData();
     const interval = setInterval(fetchData, REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [fetchData]);
+  }, [fetchData, mounted]);
 
   useEffect(() => {
     const tick = setInterval(() => setCountdown((c) => (c > 0 ? c - 1 : 0)), 1000);
     return () => clearInterval(tick);
   }, [fetchedAt]);
+
+  const addSymbol = useCallback((symbol: string) => {
+    if (DEFAULT_SYMBOL_SET.has(symbol)) return;
+    setCustomSymbols((prev) => (prev.includes(symbol) ? prev : [...prev, symbol]));
+  }, []);
+
+  const removeSymbol = useCallback((symbol: string) => {
+    setCustomSymbols((prev) => prev.filter((s) => s !== symbol));
+    setData((prev) => prev.filter((d) => d.symbol !== symbol));
+  }, []);
+
+  const defaultData = data.filter((d) => DEFAULT_SYMBOL_SET.has(d.symbol));
+  const customData = data.filter((d) => !DEFAULT_SYMBOL_SET.has(d.symbol));
+  const allExisting = new Set([...DEFAULT_SYMBOLS, ...customSymbols]);
 
   return (
     <div className="h-[100dvh] flex flex-col bg-[#0a0a0f]">
@@ -70,31 +89,24 @@ export default function MarketDashboard() {
       {/* 헤더 */}
       <header className="shrink-0 flex items-center justify-between px-4 py-2.5 border-b border-white/5">
         <span className="text-lg font-bold text-white">📈 글로벌 시황</span>
-
         <div className="flex items-center gap-2">
           {fetchedAt && (
             <span className="text-[11px] text-gray-600 hidden sm:block">
               {new Date(fetchedAt).toLocaleString("ko-KR")} 조회
             </span>
           )}
-
-          {/* 크기 토글 */}
           <div className="flex rounded-lg overflow-hidden border border-white/10">
             {SIZE_MODES.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setSize(key)}
                 className={`px-2.5 py-1.5 text-xs font-medium transition
-                  ${size === key
-                    ? "bg-white/15 text-white"
-                    : "bg-white/0 text-gray-400 hover:bg-white/10"}`}
+                  ${size === key ? "bg-white/15 text-white" : "bg-white/0 text-gray-400 hover:bg-white/10"}`}
               >
                 {label}
               </button>
             ))}
           </div>
-
-          {/* 새로고침 */}
           <button
             onClick={fetchData}
             disabled={loading}
@@ -109,24 +121,59 @@ export default function MarketDashboard() {
         </div>
       </header>
 
-      {/* 4격자 — 항상 2×2, 모바일/PC 동일 */}
-      <main className="flex-1 min-h-0 p-2.5">
+      {/* 상단 — 기본 4격자 (60%) */}
+      <div className="flex-[3] min-h-0 p-2.5">
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 text-red-400 text-xs mb-2">
             {error}
           </div>
         )}
         <div className="h-full grid grid-cols-2 grid-rows-2 gap-2.5">
-          {loading && data.length === 0
+          {loading && defaultData.length === 0
             ? [...Array(4)].map((_, i) => (
                 <div key={i} className="rounded-2xl border border-white/10 bg-white/5 animate-pulse" />
               ))
-            : data.map((item) => (
+            : defaultData.map((item) => (
                 <MarketCard key={item.symbol} data={item} size={size} />
               ))
           }
         </div>
-      </main>
+      </div>
+
+      {/* 하단 — 종목 검색 (40%) */}
+      <div className="flex-[2] min-h-[140px] flex flex-col border-t border-white/10">
+
+        {/* 검색 입력 */}
+        <div className="shrink-0 px-3 pt-2.5 pb-2">
+          <p className="text-xs font-semibold text-gray-500 mb-2">종목검색</p>
+          <StockSearch onAdd={addSymbol} existingSymbols={allExisting} />
+        </div>
+
+        {/* 추가된 종목 목록 */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 space-y-2">
+          {customSymbols.length === 0 ? (
+            <p className="text-xs text-gray-700 text-center pt-3">
+              종목을 검색하여 추가하세요
+            </p>
+          ) : (
+            <>
+              {/* Skeleton for symbols not yet loaded */}
+              {customSymbols
+                .filter((s) => !customData.find((d) => d.symbol === s))
+                .map((s) => (
+                  <div key={s} className="rounded-xl border border-white/10 bg-white/5 animate-pulse h-[88px]" />
+                ))}
+              {customData.map((item) => (
+                <SearchResultCard
+                  key={item.symbol}
+                  data={item}
+                  onRemove={() => removeSymbol(item.symbol)}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
