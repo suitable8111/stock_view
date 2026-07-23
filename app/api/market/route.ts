@@ -26,7 +26,10 @@ async function fetchChart(symbol: string, range: string, interval: string) {
     chart: {
       result: Array<{
         meta: Record<string, number | string>;
-        indicators: { quote: Array<{ close: (number | null)[]; high: (number | null)[] }> };
+        indicators: {
+          quote: Array<{ open: (number | null)[]; high: (number | null)[]; low: (number | null)[]; close: (number | null)[] }>;
+          adjclose?: Array<{ adjclose: (number | null)[] }>;
+        };
       }> | null;
       error: { description: string } | null;
     };
@@ -53,8 +56,24 @@ async function fetchSymbolData(symbol: string, defaultName?: string, defaultMark
   const currency = (meta.currency as string) ?? "";
   const market = defaultMarket ?? (currency === "KRW" ? "KR" : "US");
 
-  const highs = history.indicators?.quote?.[0]?.high ?? [];
-  const validHighs = highs.filter((v): v is number => v !== null && !isNaN(v));
+  // 주식 분할 반영 조정 고가 계산:
+  // adjclose/close 비율로 조정계수를 구해 비조정 고가(high)에 적용
+  const rawHighs = history.indicators?.quote?.[0]?.high ?? [];
+  const rawCloses = history.indicators?.quote?.[0]?.close ?? [];
+  const adjCloses = history.indicators?.adjclose?.[0]?.adjclose ?? [];
+
+  const validHighs: number[] = rawHighs
+    .map((h, i) => {
+      if (h === null || h === undefined) return null;
+      const rawClose = rawCloses[i];
+      const adjClose = adjCloses[i];
+      if (rawClose && adjClose && rawClose !== 0) {
+        return h * (adjClose / rawClose);
+      }
+      return h;
+    })
+    .filter((v): v is number => v !== null && !isNaN(v));
+
   const currentHigh = meta.regularMarketDayHigh as number | undefined;
   if (currentHigh) validHighs.push(currentHigh);
   const allTimeHigh = validHighs.length > 0 ? Math.max(...validHighs) : null;
