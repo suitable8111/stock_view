@@ -56,27 +56,12 @@ async function fetchSymbolData(symbol: string, defaultName?: string, defaultMark
   const currency = (meta.currency as string) ?? "";
   const market = defaultMarket ?? (currency === "KRW" ? "KR" : "US");
 
-  // 주식 분할 반영 조정 고가 계산:
-  // adjclose/close 비율로 조정계수를 구해 비조정 고가(high)에 적용
-  const rawHighs = history.indicators?.quote?.[0]?.high ?? [];
-  const rawCloses = history.indicators?.quote?.[0]?.close ?? [];
-  const adjCloses = history.indicators?.adjclose?.[0]?.adjclose ?? [];
-
-  const validHighs: number[] = rawHighs
-    .map((h, i) => {
-      if (h === null || h === undefined) return null;
-      const rawClose = rawCloses[i];
-      const adjClose = adjCloses[i];
-      if (rawClose && adjClose && rawClose !== 0) {
-        return h * (adjClose / rawClose);
-      }
-      return h;
-    })
-    .filter((v): v is number => v !== null && !isNaN(v));
-
-  const currentHigh = meta.regularMarketDayHigh as number | undefined;
-  if (currentHigh) validHighs.push(currentHigh);
-  const allTimeHigh = validHighs.length > 0 ? Math.max(...validHighs) : null;
+  // adjclose 기준 ATH 계산: Yahoo Finance monthly high는 분할 미반영 데이터 오염 사례가 있어
+  // 일관되게 분할+배당 조정된 adjclose를 사용. 현재가도 ATH 후보로 포함.
+  const adjCloses = (history.indicators?.adjclose?.[0]?.adjclose ?? [])
+    .filter((v): v is number => v !== null && !isNaN(v) && v > 0);
+  adjCloses.push(price);
+  const allTimeHigh = adjCloses.length > 0 ? Math.max(...adjCloses) : null;
   const athDrawdown =
     allTimeHigh !== null && allTimeHigh > 0
       ? ((price - allTimeHigh) / allTimeHigh) * 100
